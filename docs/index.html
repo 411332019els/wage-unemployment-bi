@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台灣行業薪資與失業率</title>
+<meta name="description" content="台灣各行業受僱員工薪資排名與各年齡層失業率的互動式 BI 儀表板，資料來源為行政院主計總處。">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --faded: #c9c8c1;
+    --s1: #2a78d6;  /* 類別色 1：藍 */
+    --s2: #eb6834;  /* 類別色 2：橙 */
+    --s3: #1baf7a;
+    --s4: #eda100;
+    --s5: #e87ba4;
+    --s6: #008300;
+    --s7: #4a3aa7;
+    --s8: #e34948;
+    --warn-bg: #fff4e5;
+    --warn-ink: #7a4100;
+    --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 4px 16px rgba(11, 11, 11, 0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --faded: #4a4a47;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --s4: #c98500;
+      --s5: #d55181;
+      --s6: #008300;
+      --s7: #9085e9;
+      --s8: #e66767;
+      --warn-bg: #3a2a10;
+      --warn-ink: #fab219;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --faded: #4a4a47;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --s5: #d55181;
+    --s6: #008300;
+    --s7: #9085e9;
+    --s8: #e66767;
+    --warn-bg: #3a2a10;
+    --warn-ink: #fab219;
+    --shadow: none;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+
+  header.top { padding: 28px 0 12px; }
+  header.top h1 { margin: 0; font-size: 1.6rem; line-height: 1.3; letter-spacing: 0.01em; }
+  header.top p { margin: 6px 0 0; color: var(--ink-2); }
+
+  /* 全域篩選列 */
+  .filters {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--page);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+  }
+  .filters .wrap { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 20px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field > .label { font-size: 0.8rem; color: var(--ink-2); }
+
+  .range { width: 240px; }
+  .range-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dual { position: relative; height: 28px; }
+  .dual .track, .dual .fill {
+    position: absolute; top: 12px; height: 4px; border-radius: 2px;
+  }
+  .dual .track { left: 0; right: 0; background: var(--grid); }
+  .dual .fill { background: var(--s1); }
+  .dual input[type=range] {
+    position: absolute; inset: 0; width: 100%; height: 28px; margin: 0;
+    background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+  }
+  .dual input[type=range]::-webkit-slider-runnable-track { background: none; height: 28px; }
+  .dual input[type=range]::-moz-range-track { background: none; }
+  .dual input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto; cursor: grab;
+    width: 20px; height: 20px; margin-top: 4px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--s1);
+  }
+  .dual input[type=range]::-moz-range-thumb {
+    pointer-events: auto; cursor: grab;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--s1);
+  }
+  .dual input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .dual input[type=range]:focus-visible::-moz-range-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: block; padding: 5px 12px; cursor: pointer; color: var(--ink-2); }
+  .seg input:checked + span { background: var(--s1); color: #fff; }
+  .seg input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  details.ms { position: relative; }
+  details.ms > summary {
+    list-style: none; cursor: pointer; user-select: none;
+    min-width: 150px; max-width: 240px; padding: 5px 30px 5px 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative;
+  }
+  details.ms > summary::-webkit-details-marker { display: none; }
+  details.ms > summary::after {
+    content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
+    border-right: 1.5px solid var(--ink-2); border-bottom: 1.5px solid var(--ink-2);
+    transform: translateY(-70%) rotate(45deg);
+  }
+  details.ms[open] > summary { border-color: var(--s1); }
+  .ms-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+    width: 280px; max-height: 360px; overflow: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); padding: 6px;
+  }
+  .ms-panel label {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; cursor: pointer;
+  }
+  .ms-panel label:hover { background: var(--grid); }
+  .ms-panel input { width: 16px; height: 16px; accent-color: var(--s1); }
+  .ms-actions { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 4px; border-top: 1px solid var(--border); margin-top: 4px; font-size: 0.85rem; color: var(--muted); }
+
+  button.link, button.reset {
+    font: inherit; cursor: pointer; border-radius: 8px;
+  }
+  button.link { background: none; border: 0; color: var(--s1); padding: 2px 4px; }
+  button.reset { background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); padding: 5px 12px; }
+  button.reset:hover { color: var(--ink); }
+
+  .notice {
+    display: none; margin: 12px 0 0; padding: 8px 12px; border-radius: 8px;
+    background: var(--warn-bg); color: var(--warn-ink); font-size: 0.9rem;
+  }
+  .notice.show { display: block; }
+
+  /* 卡片 */
+  main { padding: 16px 0 8px; }
+  .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 18px 14px; box-shadow: var(--shadow); min-width: 0;
+    display: flex; flex-direction: column;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { margin: 0; font-size: 1.1rem; }
+  .card .sub { margin: 2px 0 8px; color: var(--ink-2); font-size: 0.88rem; min-height: 1.4em; }
+  .chart { width: 100%; height: 380px; }
+  .chart.tall { height: 480px; }
+  .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+  .split h3 { margin: 4px 0 0; font-size: 0.95rem; }
+  .split .sub { margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.85rem; color: var(--ink-2); min-height: 1.4em; }
+  .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
+  .note { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 0 4px 0 8px; margin-left: 4px;
+    border-radius: 999px; background: var(--grid); color: var(--ink); font-size: 0.8rem;
+  }
+  .chip button { font: inherit; border: 0; background: none; color: var(--ink-2); cursor: pointer; padding: 0 4px; }
+
+  details.table { margin-top: 8px; font-size: 0.85rem; }
+  details.table summary { cursor: pointer; color: var(--ink-2); }
+  .table-wrap { overflow-x: auto; margin-top: 6px; max-height: 320px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 4px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { position: sticky; top: 0; background: var(--surface); color: var(--ink-2); font-weight: 600; }
+
+  footer { padding: 24px 0 40px; color: var(--ink-2); font-size: 0.88rem; }
+  footer h2 { font-size: 0.95rem; margin: 18px 0 6px; color: var(--ink); }
+  footer ul { margin: 0; padding-left: 1.2em; }
+  footer li { margin: 2px 0; }
+  footer a { color: var(--s1); }
+
+  @media (max-width: 760px) {
+    header.top h1 { font-size: 1.3rem; }
+    .filters { position: static; }
+    .filters .wrap { gap: 10px 14px; }
+    .field, .range { width: 100%; }
+    details.ms > summary { max-width: none; width: 100%; }
+    .ms-panel { width: 100%; }
+    .cards, .split { grid-template-columns: minmax(0, 1fr); }
+    .card { padding: 14px 12px 12px; }
+    .chart { height: 320px; }
+    .chart.tall { height: 420px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1>台灣行業薪資排名與各年齡層失業率</h1>
+    <p>各業受僱員工每人每月薪資（17 個行業）與失業率按年齡分（11 個年齡層），年資料，行政院主計總處。</p>
+  </div>
+</header>
+
+<section class="filters" aria-label="全域篩選">
+  <div class="wrap">
+    <div class="field range">
+      <span class="label" id="range-label">年份區間：<span class="range-value" id="range-value"></span></span>
+      <div class="dual">
+        <div class="track"></div>
+        <div class="fill" id="range-fill"></div>
+        <input type="range" id="year-from" aria-label="起始年份" aria-describedby="range-label">
+        <input type="range" id="year-to" aria-label="結束年份" aria-describedby="range-label">
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label" id="type-label">薪資類型</span>
+      <div class="seg" role="radiogroup" aria-labelledby="type-label" id="wage-type"></div>
+    </div>
+
+    <div class="field">
+      <span class="label">行業</span>
+      <details class="ms" id="ms-industry"></details>
+    </div>
+
+    <div class="field">
+      <span class="label">年齡層</span>
+      <details class="ms" id="ms-age"></details>
+    </div>
+
+    <div class="field">
+      <button type="button" class="reset" id="reset">重設全部</button>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <p class="notice" id="notice" role="status"></p>
+</div>
+
+<main class="wrap">
+  <div class="cards">
+    <section class="card">
+      <h2>1. 行業薪資排名</h2>
+      <p class="sub" id="sub-rank"></p>
+      <div class="chart" id="chart-rank" role="img"></div>
+      <details class="table"><summary>資料表</summary><div class="table-wrap" id="table-rank"></div></details>
+      <p class="note">點長條可在「行業薪資趨勢」突顯該行業，再點一次取消。灰線為工業及服務業全體平均（主計總處公布的加權平均），不是各行業的簡單平均。</p>
+    </section>
+
+    <section class="card">
+      <h2>2. 行業薪資趨勢</h2>
+      <p class="sub" id="sub-trend"></p>
+      <div class="legend" id="legend-trend"></div>
+      <div class="chart" id="chart-trend" role="img"></div>
+      <details class="table"><summary>資料表</summary><div class="table-wrap" id="table-trend"></div></details>
+      <p class="note">未選行業時，顯示區間最後一年薪資前 5 名與後 5 名。＊教育業、醫療保健及社會工作服務業於 2009 年與 2019 年擴大統計範圍，跨這兩年比較需留意。</p>
+    </section>
+
+    <section class="card wide">
+      <h2>3. 年齡別失業率趨勢</h2>
+      <p class="sub" id="sub-unemp"></p>
+      <div class="chart tall" id="chart-unemp" role="img"></div>
+      <details class="table"><summary>資料表</summary><div class="table-wrap" id="table-unemp"></div></details>
+      <p class="note">失業率 = 失業者 ÷ 勞動力 × 100%，人力資源調查年平均，全國數字。顏色越深（深色模式下越亮）代表年齡越輕。</p>
+    </section>
+
+    <section class="card wide">
+      <h2>4. 我的分析角度</h2>
+      <div class="split">
+        <div>
+          <h3>薪資成長率排名</h3>
+          <p class="sub" id="sub-growth"></p>
+          <div class="chart" id="chart-growth" role="img"></div>
+          <details class="table"><summary>資料表</summary><div class="table-wrap" id="table-growth"></div></details>
+        </div>
+        <div>
+          <h3>青年（15–24 歲）失業率是全體的幾倍</h3>
+          <p class="sub" id="sub-ratio"></p>
+          <div class="chart" id="chart-ratio" role="img"></div>
+          <details class="table"><summary>資料表</summary><div class="table-wrap" id="table-ratio"></div></details>
+        </div>
+      </div>
+      <p class="note">成長率 =（區間最後一年 ÷ 第一年 − 1）× 100%，為名目成長，未扣除物價上漲。倍數 = 15–24 歲失業率 ÷ 全體失業率，固定比較這兩組，不受年齡層篩選影響。</p>
+    </section>
+  </div>
+</main>
+
+<footer class="wrap">
+  <h2>資料來源</h2>
+  <ul>
+    <li>行政院主計總處，〈各業受僱員工每人每月薪資〉：總薪資（<a href="https://data.gov.tw/dataset/9634">政府資料開放平臺 9634</a>）、經常性薪資（<a href="https://data.gov.tw/dataset/9663">政府資料開放平臺 9663</a>）。開放平臺上的資料集名稱為〈歷年受僱員工每人每月總薪資〉與〈歷年受僱員工每人每月經常性薪資〉。</li>
+    <li>行政院主計總處，〈失業率按年齡分〉（<a href="https://data.gov.tw/dataset/32743">政府資料開放平臺 32743</a>）。開放平臺上的資料集名稱為〈歷年年齡組別失業率〉。</li>
+  </ul>
+  <h2>資料期間</h2>
+  <p id="period"></p>
+  <h2>限制說明</h2>
+  <ul>
+    <li>薪資為名目薪資，未經物價調整；長期成長率會包含通貨膨脹。</li>
+    <li>失業率是全國數字，只能按年齡分，不能對應到個別行業。</li>
+    <li>教育業、醫療保健及社會工作服務業於 2009 年與 2019 年擴大統計範圍，跨年比較並非完全同一群人。</li>
+    <li>薪資統計不含農林漁牧業與政府機關；教育業 2008 年以前無資料，因此本頁從 2009 年起算。</li>
+    <li>行業依「行業統計分類」第 11 次修正，主計總處已將歷年數列依新分類回溯編製。</li>
+  </ul>
+  <h2>原始碼</h2>
+  <p><a href="https://github.com/411332019els/wage-unemployment-bi">github.com/411332019els/wage-unemployment-bi</a></p>
+</footer>
+
+<script src="data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  const notice = document.getElementById("notice");
+  const D = window.BI_DATA;
+  if (!D) {
+    notice.textContent = "找不到資料檔 data.js，請確認它和 index.html 放在同一個資料夾。";
+    notice.classList.add("show");
+    return;
+  }
+  const hasECharts = typeof window.echarts !== "undefined";
+  if (!hasECharts) {
+    notice.textContent = "圖表元件（ECharts）載入失敗，請確認網路連線後重新整理；各卡片的「資料表」仍可查看。";
+    notice.classList.add("show");
+  }
+
+  // ---------- 常數與工具 ----------
+  const YEARS = D.years;
+  const INDUSTRIES = D.wage.industries;
+  const AGES = D.unemployment.ageGroups;
+  const TYPES = D.wage.types;
+  const SCOPE_CHANGED = new Set(["教育業", "醫療保健及社會工作服務業"]);
+  const SHORT = {
+    "礦業及土石採取業": "礦業及土石採取",
+    "製造業": "製造業",
+    "電力及燃氣供應業": "電力及燃氣",
+    "用水供應及污染整治業": "用水及污染整治",
+    "營建工程業": "營建工程",
+    "批發及零售業": "批發零售",
+    "運輸及倉儲業": "運輸倉儲",
+    "住宿及餐飲業": "住宿餐飲",
+    "出版影音及資通訊業": "出版影音資通訊",
+    "金融及保險業": "金融保險",
+    "不動產業": "不動產",
+    "專業、科學及技術服務業": "專業科學技術",
+    "支援服務業": "支援服務",
+    "教育業": "教育",
+    "醫療保健及社會工作服務業": "醫療保健社工",
+    "藝術、娛樂及休閒服務業": "藝術娛樂休閒",
+    "其他服務業": "其他服務",
+  };
+  const short = (name) => (SHORT[name] || name) + (SCOPE_CHANGED.has(name) ? "＊" : "");
+  const fmtInt = (n) => Math.round(n).toLocaleString("zh-TW");
+  const fmt1 = (n) => n.toFixed(1);
+  const fmt2 = (n) => n.toFixed(2);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ageLabel = (a) => (a === "65+" ? "65 歲以上" : a.replace("-", "–") + " 歲");
+
+  // 年齡層用單一藍色的明暗順序（年輕 → 年長），淺色模式年輕最深、深色模式年輕最亮。
+  const AGE_RAMP_LIGHT = ["#0d366b", "#10417f", "#164c91", "#1b58a4", "#2164b7", "#2871cb", "#307edc", "#418ce6", "#5a9be8", "#70a9ec", "#86b6ef"];
+  const AGE_RAMP_DARK = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"];
+
+  // ---------- 狀態 ----------
+  const defaults = () => ({
+    from: 0,
+    to: YEARS.length - 1,
+    type: TYPES[0],
+    industries: new Set(),
+    ages: new Set(),
+    highlight: null,
+  });
+  let state = defaults();
+
+  // ---------- 主題色 ----------
+  let T = {};
+  const isDark = () => {
+    const forced = document.documentElement.getAttribute("data-theme");
+    if (forced) return forced === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  function readTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name) => cs.getPropertyValue(name).trim();
+    T = {
+      ink: v("--ink"), ink2: v("--ink-2"), muted: v("--muted"), grid: v("--grid"), axis: v("--axis"),
+      surface: v("--surface"), border: v("--border"), faded: v("--faded"),
+      series: ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"].map(v),
+      ageRamp: isDark() ? AGE_RAMP_DARK : AGE_RAMP_LIGHT,
+    };
+  }
+
+  // ---------- 篩選列 ----------
+  const fromInput = document.getElementById("year-from");
+  const toInput = document.getElementById("year-to");
+  for (const input of [fromInput, toInput]) {
+    input.min = 0;
+    input.max = YEARS.length - 1;
+    input.step = 1;
+  }
+  function syncRange() {
+    fromInput.value = state.from;
+    toInput.value = state.to;
+    const n = YEARS.length - 1;
+    const fill = document.getElementById("range-fill");
+    fill.style.left = (state.from / n) * 100 + "%";
+    fill.style.right = (100 - (state.to / n) * 100) + "%";
+    document.getElementById("range-value").textContent = `${YEARS[state.from]}–${YEARS[state.to]}`;
+    fromInput.setAttribute("aria-valuetext", `${YEARS[state.from]} 年`);
+    toInput.setAttribute("aria-valuetext", `${YEARS[state.to]} 年`);
+    // 兩個把手重疊時，讓還能移動的那個在上面
+    fromInput.style.zIndex = state.from >= n - 1 ? 3 : 1;
+    toInput.style.zIndex = 2;
+  }
+  // 區間至少兩年，成長率與趨勢才有意義
+  fromInput.addEventListener("input", () => {
+    state.from = Math.min(+fromInput.value, state.to - 1);
+    syncRange();
+    scheduleRender();
+  });
+  toInput.addEventListener("input", () => {
+    state.to = Math.max(+toInput.value, state.from + 1);
+    syncRange();
+    scheduleRender();
+  });
+
+  const typeBox = document.getElementById("wage-type");
+  TYPES.forEach((t) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "wage-type";
+    input.value = t;
+    input.addEventListener("change", () => { state.type = t; scheduleRender(); });
+    const span = document.createElement("span");
+    span.textContent = t;
+    label.append(input, span);
+    typeBox.append(label);
+  });
+  function syncType() {
+    typeBox.querySelectorAll("input").forEach((i) => { i.checked = i.value === state.type; });
+  }
+
+  function buildMulti(el, items, labelOf, set, noun) {
+    const summary = document.createElement("summary");
+    const panel = document.createElement("div");
+    panel.className = "ms-panel";
+    const boxes = items.map((item) => {
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = item;
+      box.addEventListener("change", () => {
+        box.checked ? set().add(item) : set().delete(item);
+        sync();
+        scheduleRender();
+      });
+      label.append(box, document.createTextNode(labelOf(item)));
+      panel.append(label);
+      return box;
+    });
+    const actions = document.createElement("div");
+    actions.className = "ms-actions";
+    const hint = document.createElement("span");
+    hint.textContent = "沒選 = 全部";
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "link";
+    clear.textContent = "清除";
+    clear.addEventListener("click", () => { set().clear(); sync(); scheduleRender(); });
+    actions.append(hint, clear);
+    panel.append(actions);
+    el.append(summary, panel);
+
+    function sync() {
+      const s = set();
+      boxes.forEach((b) => { b.checked = s.has(b.value); });
+      if (s.size === 0) summary.textContent = `全部${noun}（${items.length}）`;
+      else if (s.size === 1) summary.textContent = labelOf([...s][0]);
+      else summary.textContent = `已選 ${s.size} 個${noun}`;
+    }
+    return sync;
+  }
+  const syncIndustry = buildMulti(document.getElementById("ms-industry"), INDUSTRIES, (x) => x, () => state.industries, "行業");
+  const syncAge = buildMulti(document.getElementById("ms-age"), AGES, ageLabel, () => state.ages, "年齡層");
+
+  // 點外面或按 Esc 關閉下拉
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll("details.ms[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") document.querySelectorAll("details.ms[open]").forEach((d) => { d.open = false; d.querySelector("summary").focus(); });
+  });
+
+  document.getElementById("reset").addEventListener("click", () => {
+    state = defaults();
+    syncAll();
+    scheduleRender();
+  });
+
+  function syncAll() { syncRange(); syncType(); syncIndustry(); syncAge(); }
+
+  // ---------- 圖表共用 ----------
+  const charts = {};
+  function chart(id) {
+    if (!hasECharts) return null;
+    if (!charts[id]) charts[id] = echarts.init(document.getElementById(id), null, { renderer: "canvas" });
+    return charts[id];
+  }
+  function setHeight(id, px) {
+    const el = document.getElementById(id);
+    if (el.style.height !== px + "px") {
+      el.style.height = px + "px";
+      if (charts[id]) charts[id].resize();
+    }
+  }
+  const textStyle = () => ({ fontFamily: getComputedStyle(document.body).fontFamily, color: T.ink2 });
+  const axisName = (name, loc) => ({ name, nameLocation: loc || "end", nameTextStyle: { color: T.ink2, fontSize: 12 } });
+  const valueAxis = (extra) => ({
+    type: "value",
+    axisLine: { show: false },
+    axisTick: { show: false },
+    axisLabel: { color: T.muted, fontSize: 11 },
+    splitLine: { lineStyle: { color: T.grid, width: 1 } },
+    ...extra,
+  });
+  const categoryAxis = (data, extra) => ({
+    type: "category",
+    data,
+    axisLine: { lineStyle: { color: T.axis } },
+    axisTick: { show: false },
+    axisLabel: { color: T.ink2, fontSize: 11 },
+    ...extra,
+  });
+  const tooltipBase = () => ({
+    backgroundColor: T.surface,
+    borderColor: T.border,
+    borderWidth: 1,
+    padding: [8, 10],
+    textStyle: { color: T.ink, fontSize: 12 },
+    extraCssText: "box-shadow:0 4px 16px rgba(0,0,0,.12);border-radius:8px;",
+    confine: true,
+  });
+  const lineKey = (color) => `<span style="display:inline-block;width:12px;height:2px;border-radius:1px;background:${color};vertical-align:middle;margin-right:6px"></span>`;
+  const animation = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function renderTable(id, head, rows) {
+    const table = document.createElement("table");
+    const thead = table.createTHead().insertRow();
+    head.forEach((h) => { const th = document.createElement("th"); th.textContent = h; thead.append(th); });
+    const tbody = table.createTBody();
+    rows.forEach((r) => {
+      const tr = tbody.insertRow();
+      r.forEach((c) => { tr.insertCell().textContent = c; });
+    });
+    document.getElementById(id).replaceChildren(table);
+  }
+
+  const shownIndustries = () => (state.industries.size ? INDUSTRIES.filter((i) => state.industries.has(i)) : INDUSTRIES);
+  const shownAges = () => (state.ages.size ? AGES.filter((a) => state.ages.has(a)) : AGES);
+  const rangeIdx = () => Array.from({ length: state.to - state.from + 1 }, (_, k) => state.from + k);
+  const amount = (ind, i) => D.wage.amount[state.type][ind][i];
+
+  function toggleHighlight(name) {
+    state.highlight = state.highlight === name ? null : name;
+    scheduleRender();
+  }
+
+  // ---------- 1. 行業薪資排名 ----------
+  function renderRank() {
+    const last = state.to;
+    const year = YEARS[last];
+    const rows = shownIndustries().map((ind) => ({ ind, v: amount(ind, last) })).sort((a, b) => b.v - a.v);
+    const avg = D.wage.overall[state.type][last];
+    document.getElementById("sub-rank").textContent = `${year} 年・各業受僱員工每人每月${state.type}・${rows.length} 個行業，由高到低`;
+    renderTable("table-rank", ["名次", "行業", `${state.type}（元/月）`], rows.map((r, i) => [i + 1, r.ind, fmtInt(r.v)]).concat([["", "工業及服務業全體平均", fmtInt(avg)]]));
+    const el = document.getElementById("chart-rank");
+    el.setAttribute("aria-label", `${year} 年各行業${state.type}排名，最高 ${rows[0].ind} ${fmtInt(rows[0].v)} 元，最低 ${rows.at(-1).ind} ${fmtInt(rows.at(-1).v)} 元，全體平均 ${fmtInt(avg)} 元`);
+    setHeight("chart-rank", Math.max(260, rows.length * 26 + 80));
+    const c = chart("chart-rank");
+    if (!c) return;
+    c.setOption({
+      animation,
+      textStyle: textStyle(),
+      grid: { left: 8, right: 56, top: 44, bottom: 36, containLabel: true },
+      xAxis: valueAxis({ ...axisName("元/月", "middle"), nameGap: 26, axisLabel: { color: T.muted, fontSize: 11, formatter: (v) => (v >= 10000 ? v / 10000 + " 萬" : v) } }),
+      yAxis: categoryAxis(rows.map((r) => r.ind), {
+        inverse: true,
+        axisLabel: { color: T.ink2, fontSize: 11, formatter: short },
+        ...axisName("行業"),
+        nameLocation: "start",
+        nameGap: 10,
+        nameTextStyle: { color: T.ink2, fontSize: 12, align: "right", padding: [0, 6, 0, 0] },
+      }),
+      tooltip: {
+        ...tooltipBase(),
+        trigger: "item",
+        formatter: (p) => `<b style="font-size:14px">${fmtInt(p.value)} 元/月</b><br>${esc(p.name)}<br><span style="color:${T.muted}">第 ${p.dataIndex + 1} 名・全體平均 ${fmtInt(avg)} 元</span>`,
+      },
+      series: [{
+        type: "bar",
+        barMaxWidth: 16,
+        barCategoryGap: "35%",
+        cursor: "pointer",
+        data: rows.map((r) => ({
+          value: r.v,
+          name: r.ind,
+          itemStyle: {
+            color: state.highlight && state.highlight !== r.ind ? T.faded : (state.highlight === r.ind ? T.series[1] : T.series[0]),
+            borderRadius: [0, 4, 4, 0],
+          },
+        })),
+        emphasis: { itemStyle: { opacity: 0.85 } },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: T.ink2, width: 1, type: "solid" },
+          label: { color: T.ink2, fontSize: 11, formatter: () => `全體平均\n${fmtInt(avg)}`, position: "start", distance: 4 },
+          data: [{ xAxis: avg }],
+        },
+      }],
+    }, true);
+  }
+
+  // ---------- 2. 行業薪資趨勢 ----------
+  function renderTrend() {
+    const idx = rangeIdx();
+    const last = state.to;
+    let lines; // [{ind, color, group}]
+    const legend = document.getElementById("legend-trend");
+    legend.replaceChildren();
+
+    if (state.industries.size === 0) {
+      const sorted = INDUSTRIES.slice().sort((a, b) => amount(b, last) - amount(a, last));
+      lines = [
+        ...sorted.slice(0, 5).map((ind) => ({ ind, color: T.series[0], group: "前 5 名" })),
+        ...sorted.slice(-5).map((ind) => ({ ind, color: T.series[1], group: "後 5 名" })),
+      ];
+      [["前 5 名", T.series[0]], ["後 5 名", T.series[1]]].forEach(([label, color]) => legend.append(legendItem(label, color)));
+    } else {
+      const sel = shownIndustries();
+      // 顏色跟著行業在分類中的固定順序，不跟排名走；超過 8 條就統一一色，靠線尾標籤辨識
+      lines = sel.map((ind, k) => ({ ind, color: sel.length <= 8 ? T.series[k] : T.series[0], group: "" }));
+      if (sel.length <= 8) sel.forEach((ind, k) => legend.append(legendItem(short(ind), T.series[k])));
+    }
+    // 第 1 張圖點到、但不在目前清單裡的行業，補一條上來突顯
+    if (state.highlight && !lines.some((l) => l.ind === state.highlight)) {
+      lines.push({ ind: state.highlight, color: T.series[6], group: "點選" });
+    }
+
+    const sub = document.getElementById("sub-trend");
+    sub.textContent = `${YEARS[state.from]}–${YEARS[last]} 年・每人每月${state.type}・${state.industries.size ? `已選 ${lines.length} 個行業` : "前 5 名與後 5 名"}`;
+    if (state.highlight) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.append(document.createTextNode("突顯：" + state.highlight));
+      const x = document.createElement("button");
+      x.type = "button";
+      x.setAttribute("aria-label", "取消突顯");
+      x.textContent = "×";
+      x.addEventListener("click", () => toggleHighlight(state.highlight));
+      chip.append(x);
+      sub.append(chip);
+    }
+
+    renderTable("table-trend", ["行業", ...idx.map((i) => String(YEARS[i]))], lines.map((l) => [l.ind, ...idx.map((i) => fmtInt(amount(l.ind, i)))]));
+    document.getElementById("chart-trend").setAttribute("aria-label", `${YEARS[state.from]} 至 ${YEARS[last]} 年 ${lines.length} 個行業的${state.type}趨勢折線圖`);
+
+    const c = chart("chart-trend");
+    if (!c) return;
+    const hl = state.highlight;
+    c.setOption({
+      animation,
+      textStyle: textStyle(),
+      grid: { left: 8, right: 104, top: 30, bottom: 36, containLabel: true },
+      xAxis: categoryAxis(idx.map((i) => String(YEARS[i])), { boundaryGap: false, ...axisName("年", "middle"), nameGap: 26 }),
+      yAxis: valueAxis({ ...axisName("元/月"), scale: true, axisLabel: { color: T.muted, fontSize: 11, formatter: (v) => fmtInt(v) } }),
+      tooltip: {
+        ...tooltipBase(),
+        trigger: "axis",
+        axisPointer: { type: "line", lineStyle: { color: T.axis, width: 1 } },
+        formatter: (ps) => {
+          const rows = ps.slice().sort((a, b) => b.value - a.value)
+            .map((p) => `${lineKey(lines[p.seriesIndex].color)}<b>${fmtInt(p.value)}</b> <span style="color:${T.ink2}">${esc(p.seriesName)}</span>`);
+          return `<span style="color:${T.muted}">${ps[0].axisValue} 年・元/月</span><br>${rows.join("<br>")}`;
+        },
+      },
+      series: lines.map((l) => {
+        const on = !hl || hl === l.ind;
+        const color = on ? l.color : T.faded;
+        return {
+          type: "line",
+          name: l.ind,
+          data: idx.map((i) => amount(l.ind, i)),
+          symbol: "circle",
+          symbolSize: hl === l.ind ? 7 : 5,
+          showSymbol: idx.length <= 12,
+          z: hl === l.ind ? 10 : 2,
+          lineStyle: { width: hl === l.ind ? 3.5 : 2, color },
+          itemStyle: { color, borderColor: T.surface, borderWidth: 1 },
+          emphasis: { focus: "series" },
+          endLabel: { show: true, formatter: () => short(l.ind), color: on ? T.ink2 : T.muted, fontSize: 11, distance: 6, fontWeight: hl === l.ind ? "bold" : "normal" },
+          labelLayout: { moveOverlap: "shiftY" },
+        };
+      }),
+    }, true);
+  }
+  function legendItem(label, color) {
+    const span = document.createElement("span");
+    const key = document.createElement("i");
+    key.style.background = color;
+    span.append(key, document.createTextNode(label));
+    return span;
+  }
+
+  // ---------- 3. 年齡別失業率趨勢 ----------
+  function renderUnemp() {
+    const idx = rangeIdx();
+    const ages = shownAges();
+    const rate = (a, i) => D.unemployment.rate[a][i];
+    const lastIdx = state.to;
+    const top = ages.slice().sort((a, b) => rate(b, lastIdx) - rate(a, lastIdx))[0];
+    document.getElementById("sub-unemp").textContent = `${YEARS[state.from]}–${YEARS[state.to]} 年・失業率按年齡分・${ages.length} 個年齡層；${YEARS[lastIdx]} 年最高為 ${ageLabel(top)}（${fmt2(rate(top, lastIdx))}%）`;
+    renderTable("table-unemp", ["年齡層", ...idx.map((i) => String(YEARS[i]))], ages.map((a) => [ageLabel(a), ...idx.map((i) => fmt2(rate(a, i)))]));
+    document.getElementById("chart-unemp").setAttribute("aria-label", `${YEARS[state.from]} 至 ${YEARS[state.to]} 年 ${ages.length} 個年齡層的失業率折線圖`);
+    const c = chart("chart-unemp");
+    if (!c) return;
+    const colorOf = (a) => T.ageRamp[AGES.indexOf(a)];
+    c.setOption({
+      animation,
+      textStyle: textStyle(),
+      legend: {
+        type: "scroll",
+        top: 0,
+        left: 0,
+        icon: "path://M0,0 L14,0 L14,2 L0,2 Z",
+        itemWidth: 14,
+        itemHeight: 2,
+        textStyle: { color: T.ink2, fontSize: 11 },
+        pageTextStyle: { color: T.ink2 },
+        formatter: ageLabel,
+      },
+      grid: { left: 8, right: 80, top: 64, bottom: 36, containLabel: true },
+      xAxis: categoryAxis(idx.map((i) => String(YEARS[i])), { boundaryGap: false, ...axisName("年", "middle"), nameGap: 26 }),
+      yAxis: valueAxis({ ...axisName("%"), min: 0, axisLabel: { color: T.muted, fontSize: 11, formatter: "{value}%" } }),
+      tooltip: {
+        ...tooltipBase(),
+        trigger: "axis",
+        axisPointer: { type: "line", lineStyle: { color: T.axis, width: 1 } },
+        formatter: (ps) => {
+          const rows = ps.slice().sort((a, b) => b.value - a.value)
+            .map((p) => `${lineKey(colorOf(p.seriesName))}<b>${fmt2(p.value)}%</b> <span style="color:${T.ink2}">${esc(ageLabel(p.seriesName))}</span>`);
+          return `<span style="color:${T.muted}">${ps[0].axisValue} 年・失業率</span><br>${rows.join("<br>")}`;
+        },
+      },
+      series: ages.map((a) => ({
+        type: "line",
+        name: a,
+        data: idx.map((i) => rate(a, i)),
+        symbol: "circle",
+        symbolSize: 5,
+        showSymbol: idx.length <= 12,
+        lineStyle: { width: 2, color: colorOf(a) },
+        itemStyle: { color: colorOf(a), borderColor: T.surface, borderWidth: 1 },
+        emphasis: { focus: "series" },
+        endLabel: { show: true, formatter: () => ageLabel(a), color: T.ink2, fontSize: 11, distance: 6 },
+        labelLayout: { moveOverlap: "shiftY" },
+      })),
+    }, true);
+  }
+
+  // ---------- 4. 我的分析角度 ----------
+  function renderGrowth() {
+    const first = state.from, last = state.to;
+    const rows = shownIndustries()
+      .map((ind) => ({ ind, g: (amount(ind, last) / amount(ind, first) - 1) * 100, a: amount(ind, first), b: amount(ind, last) }))
+      .sort((x, y) => y.g - x.g);
+    const allG = (D.wage.overall[state.type][last] / D.wage.overall[state.type][first] - 1) * 100;
+    document.getElementById("sub-growth").textContent = `${YEARS[first]} → ${YEARS[last]} 年・每人每月${state.type}・全體平均成長 ${fmt1(allG)}%`;
+    renderTable("table-growth", ["名次", "行業", `${YEARS[first]}（元/月）`, `${YEARS[last]}（元/月）`, "成長率（%）"],
+      rows.map((r, i) => [i + 1, r.ind, fmtInt(r.a), fmtInt(r.b), fmt1(r.g)]));
+    document.getElementById("chart-growth").setAttribute("aria-label", `${YEARS[first]} 到 ${YEARS[last]} 年${state.type}成長率排名，最高 ${rows[0].ind} ${fmt1(rows[0].g)}%，最低 ${rows.at(-1).ind} ${fmt1(rows.at(-1).g)}%`);
+    setHeight("chart-growth", Math.max(260, rows.length * 26 + 80));
+    const c = chart("chart-growth");
+    if (!c) return;
+    c.setOption({
+      animation,
+      textStyle: textStyle(),
+      grid: { left: 8, right: 56, top: 44, bottom: 36, containLabel: true },
+      xAxis: valueAxis({ ...axisName("成長率（%）", "middle"), nameGap: 26, axisLabel: { color: T.muted, fontSize: 11, formatter: "{value}%" } }),
+      yAxis: categoryAxis(rows.map((r) => r.ind), { inverse: true, axisLabel: { color: T.ink2, fontSize: 11, formatter: short } }),
+      tooltip: {
+        ...tooltipBase(),
+        trigger: "item",
+        formatter: (p) => {
+          const r = rows[p.dataIndex];
+          return `<b style="font-size:14px">${fmt1(r.g)}%</b><br>${esc(r.ind)}<br><span style="color:${T.muted}">${YEARS[first]} 年 ${fmtInt(r.a)} → ${YEARS[last]} 年 ${fmtInt(r.b)} 元/月</span>`;
+        },
+      },
+      series: [{
+        type: "bar",
+        barMaxWidth: 16,
+        barCategoryGap: "35%",
+        cursor: "pointer",
+        data: rows.map((r) => ({
+          value: +r.g.toFixed(2),
+          name: r.ind,
+          itemStyle: {
+            color: state.highlight && state.highlight !== r.ind ? T.faded : (state.highlight === r.ind ? T.series[1] : T.series[0]),
+            borderRadius: r.g >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4],
+          },
+        })),
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: T.ink2, width: 1, type: "solid" },
+          label: { color: T.ink2, fontSize: 11, formatter: () => `全體平均\n${fmt1(allG)}%`, position: "start", distance: 4 },
+          data: [{ xAxis: +allG.toFixed(2) }],
+        },
+      }],
+    }, true);
+  }
+
+  function renderRatio() {
+    const idx = rangeIdx();
+    const youth = D.unemployment.overall["15-24"];
+    const all = D.unemployment.overall["全體"];
+    const ratio = idx.map((i) => youth[i] / all[i]);
+    const lastR = ratio.at(-1);
+    document.getElementById("sub-ratio").textContent = `${YEARS[state.to]} 年為 ${fmt2(lastR)} 倍（15–24 歲 ${fmt2(youth[state.to])}% ÷ 全體 ${fmt2(all[state.to])}%）`;
+    renderTable("table-ratio", ["年", "15–24 歲（%）", "全體（%）", "倍數"], idx.map((i, k) => [String(YEARS[i]), fmt2(youth[i]), fmt2(all[i]), fmt2(ratio[k])]));
+    document.getElementById("chart-ratio").setAttribute("aria-label", `${YEARS[state.from]} 至 ${YEARS[state.to]} 年，15 到 24 歲失業率為全體的倍數，最新 ${fmt2(lastR)} 倍`);
+    setHeight("chart-ratio", Math.max(260, document.getElementById("chart-growth").offsetHeight || 380));
+    const c = chart("chart-ratio");
+    if (!c) return;
+    c.setOption({
+      animation,
+      textStyle: textStyle(),
+      grid: { left: 8, right: 56, top: 28, bottom: 36, containLabel: true },
+      xAxis: categoryAxis(idx.map((i) => String(YEARS[i])), { boundaryGap: false, ...axisName("年", "middle"), nameGap: 26 }),
+      yAxis: valueAxis({ ...axisName("倍"), min: 0, axisLabel: { color: T.muted, fontSize: 11, formatter: "{value} 倍" } }),
+      tooltip: {
+        ...tooltipBase(),
+        trigger: "axis",
+        axisPointer: { type: "line", lineStyle: { color: T.axis, width: 1 } },
+        formatter: (ps) => {
+          const k = ps[0].dataIndex, i = idx[k];
+          return `<span style="color:${T.muted}">${YEARS[i]} 年</span><br><b style="font-size:14px">${fmt2(ratio[k])} 倍</b><br><span style="color:${T.ink2}">15–24 歲 ${fmt2(youth[i])}% ÷ 全體 ${fmt2(all[i])}%</span>`;
+        },
+      },
+      series: [{
+        type: "line",
+        name: "倍數",
+        data: ratio.map((r) => +r.toFixed(3)),
+        symbol: "circle",
+        symbolSize: 6,
+        showSymbol: idx.length <= 12,
+        lineStyle: { width: 2, color: T.series[0] },
+        itemStyle: { color: T.series[0], borderColor: T.surface, borderWidth: 1 },
+        endLabel: { show: true, formatter: () => `${fmt2(lastR)} 倍`, color: T.ink, fontSize: 12, fontWeight: "bold", distance: 6 },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: T.axis, width: 1, type: "solid" },
+          label: { color: T.muted, fontSize: 11, formatter: "1 倍＝與全體相同", position: "insideEndTop" },
+          data: [{ yAxis: 1 }],
+        },
+      }],
+    }, true);
+  }
+
+  // ---------- 排程與事件 ----------
+  let pending = false;
+  function scheduleRender() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      renderAll();
+    });
+  }
+  function renderAll() {
+    readTheme();
+    renderRank();
+    renderTrend();
+    renderUnemp();
+    renderGrowth();
+    renderRatio();
+  }
+
+  if (hasECharts) {
+    chart("chart-rank").on("click", (p) => p.componentType === "series" && toggleHighlight(p.name));
+    chart("chart-growth").on("click", (p) => p.componentType === "series" && toggleHighlight(p.name));
+  }
+  let resizeTimer;
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => Object.values(charts).forEach((c) => c.resize()), 120);
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", scheduleRender);
+
+  document.getElementById("period").textContent =
+    `${YEARS[0]}–${YEARS.at(-1)} 年，年資料（薪資為全年平均每人每月；失業率為年平均）。`;
+
+  syncAll();
+  renderAll();
+})();
+</script>
+</body>
+</html>

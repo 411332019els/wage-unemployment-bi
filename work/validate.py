@@ -99,6 +99,21 @@ def main() -> None:
     check(wy == uy == list(range(wy[0], wy[-1] + 1)), f"兩表年份相同且連續（{wy[0]}–{wy[-1]}，{len(wy)} 年）")
     check(set(wages.industry) == set(mapping.industry), "薪資表行業與對照表一致")
 
+    print("4. 全體數字（網頁參考線用）")
+    wage_overall = pd.read_csv(DATA / "wage_overall.csv", encoding="utf-8-sig")
+    unemp_overall = pd.read_csv(DATA / "unemployment_overall.csv", encoding="utf-8-sig")
+    check(sorted(wage_overall.year.unique()) == wy and sorted(unemp_overall.year.unique()) == wy, "年份與明細表相同")
+    check(len(wage_overall) == 2 * len(wy) and len(unemp_overall) == 2 * len(wy), "每年各 2 列，沒有缺漏")
+    w = wage_overall.loc[rng.choice(wage_overall.index)]
+    raw = raw_wage(w.wage_type, w.year, "工業及服務業__Industry_and_services_金額_新臺幣元")
+    check(float(raw) == float(w.amount_twd), f"{w.year} 全體 {w.wage_type}: CSV {w.amount_twd} / 原始 {raw}")
+    u = unemp_overall.loc[rng.choice(unemp_overall.index)]
+    needle = "總計_Total_百分比" if u.group == "全體" else "年齡15-24歲_合計_"
+    rec = next(r for r in raw_records(UNEMPLOYMENT_FILE) if r["年月別_Year_and_month"].endswith(f"Ave., {u.year}"))
+    raw = next(v for t, v in rec.items() if t.startswith(needle))
+    check(float(raw) == float(u.unemployment_rate_pct), f"{u.year} {u.group} 失業率: CSV {u.unemployment_rate_pct} / 原始 {raw}")
+    check(unemp_overall.unemployment_rate_pct.between(0, 30).all() and (wage_overall.amount_twd > 0).all(), "全體數字範圍合理")
+
     print()
     if failures:
         print(f"共 {len(failures)} 項失敗")

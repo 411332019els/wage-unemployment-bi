@@ -81,6 +81,13 @@ AGE_GROUPS = [
     ("年齡65歲以上_合計_65_years_and_above_Total_百分比", "65+"),
 ]
 
+# 網頁的參考線用的全體數字，另存成 *_overall.csv，不混進上面兩張明細表。
+WAGE_OVERALL_TAG = "工業及服務業__Industry_and_services_金額_新臺幣元"
+UNEMPLOYMENT_OVERALL = [
+    ("總計_Total_百分比", "全體"),
+    ("年齡15-24歲_合計_15-24_years_Total_百分比", "15-24"),
+]
+
 # 失業率檔的年列長這樣：「１１３年平均 Ave., 2024」（全形數字、前置空白）；月列是「１　月  Jan.」。
 ROC_ANNUAL = re.compile(r"^(\d+)年平均\s*Ave\.,\s*(\d{4})$")
 
@@ -99,17 +106,33 @@ def parse_number(text: str) -> float | None:
     return float(text)
 
 
+def annual_wage_records(path: Path):
+    """依序產出 (西元年, record)，只留 START_YEAR 以後的年資料。"""
+    for rec in records(path):
+        period = rec["年月別_Year_and_month"]
+        # 年資料是 4 位數西元年；6 位數是月資料；帶 Ⓟ（初步）的是當年尚未結束的累計值，都不要。
+        if re.fullmatch(r"\d{4}", period) and int(period) >= START_YEAR:
+            yield int(period), rec
+
+
+def annual_unemployment_records():
+    """依序產出 (西元年, record)，只留 START_YEAR 以後的年平均。"""
+    for rec in records(UNEMPLOYMENT_FILE):
+        label = unicodedata.normalize("NFKC", rec["年月別_Year_and_month"]).strip()
+        m = ROC_ANNUAL.match(label)
+        if not m:
+            continue  # 月資料
+        year = int(m.group(1)) + 1911  # 民國年轉西元年
+        if year != int(m.group(2)):
+            raise ValueError(f"民國年與標籤上的西元年不符：{label!r}")
+        if year >= START_YEAR:
+            yield year, rec
+
+
 def build_wages() -> pd.DataFrame:
     rows = []
     for wage_type, path in WAGE_FILES.items():
-        for rec in records(path):
-            period = rec["年月別_Year_and_month"]
-            # 年資料是 4 位數西元年；6 位數是月資料；帶 Ⓟ（初步）的是當年尚未結束的累計值，都不要。
-            if not re.fullmatch(r"\d{4}", period):
-                continue
-            year = int(period)
-            if year < START_YEAR:
-                continue
+        for year, rec in annual_wage_records(path):
             unknown = set(rec) - WAGE_EXCLUDED_TAGS - INDUSTRY_BY_TAG.keys()
             if unknown:
                 raise ValueError(f"{path.name} {year} 出現未對照的欄位：{sorted(unknown)}")
@@ -123,23 +146,36 @@ def build_wages() -> pd.DataFrame:
 
 
 def build_unemployment() -> pd.DataFrame:
+    return pd.DataFrame(
+        unemployment_rows(AGE_GROUPS), columns=["year", "age_group", "unemployment_rate_pct"]
+    )
+
+
+def unemployment_rows(columns: list[tuple[str, str]]) -> list[tuple[int, str, float]]:
     rows = []
-    for rec in records(UNEMPLOYMENT_FILE):
-        label = unicodedata.normalize("NFKC", rec["年月別_Year_and_month"]).strip()
-        m = ROC_ANNUAL.match(label)
-        if not m:
-            continue  # 月資料
-        year = int(m.group(1)) + 1911  # 民國年轉西元年
-        if year != int(m.group(2)):
-            raise ValueError(f"民國年與標籤上的西元年不符：{label!r}")
-        if year < START_YEAR:
-            continue
-        for tag, age_group in AGE_GROUPS:
+    for year, rec in annual_unemployment_records():
+        for tag, group in columns:
             rate = parse_number(rec[tag])
             if rate is None:
-                raise ValueError(f"{year} {age_group} 無資料，請調整 START_YEAR")
-            rows.append((year, age_group, rate))
-    return pd.DataFrame(rows, columns=["year", "age_group", "unemployment_rate_pct"])
+                raise ValueError(f"{year} {group} 無資料，請調整 START_YEAR")
+            rows.append((year, group, rate))
+    return rows
+
+
+def build_wage_overall() -> pd.DataFrame:
+    """工業及服務業（全體）每人每月薪資，官方加權平均，網頁的平均線用。"""
+    rows = []
+    for wage_type, path in WAGE_FILES.items():
+        for year, rec in annual_wage_records(path):
+            rows.append((year, wage_type, int(parse_number(rec[WAGE_OVERALL_TAG]))))
+    return pd.DataFrame(rows, columns=["year", "wage_type", "amount_twd"])
+
+
+def build_unemployment_overall() -> pd.DataFrame:
+    """全體與 15-24 歲失業率，網頁算「青年失業率是全體的幾倍」用。"""
+    return pd.DataFrame(
+        unemployment_rows(UNEMPLOYMENT_OVERALL), columns=["year", "group", "unemployment_rate_pct"]
+    )
 
 
 def main() -> None:
@@ -155,9 +191,17 @@ def main() -> None:
     mapping.insert(0, "source_files", "mp05001.xml;mp05002.xml")
     mapping.to_csv(DATA / "industry_mapping.csv", index=False, encoding=ENCODING)
 
+    wage_overall = build_wage_overall()
+    wage_overall.to_csv(DATA / "wage_overall.csv", index=False, encoding=ENCODING)
+
+    unemployment_overall = build_unemployment_overall()
+    unemployment_overall.to_csv(DATA / "unemployment_overall.csv", index=False, encoding=ENCODING)
+
     print(f"wage_by_industry.csv     {len(wages):>5} 列  {wages.year.min()}–{wages.year.max()}  {wages.industry.nunique()} 個行業")
     print(f"unemployment_by_age.csv  {len(unemployment):>5} 列  {unemployment.year.min()}–{unemployment.year.max()}  {unemployment.age_group.nunique()} 個年齡組")
     print(f"industry_mapping.csv     {len(mapping):>5} 列")
+    print(f"wage_overall.csv         {len(wage_overall):>5} 列")
+    print(f"unemployment_overall.csv {len(unemployment_overall):>5} 列")
 
 
 if __name__ == "__main__":
